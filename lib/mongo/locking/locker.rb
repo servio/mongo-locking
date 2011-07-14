@@ -218,7 +218,7 @@ module Mongo
 
             def parent_for(lockable)
                 return case parent = self.config[:parent]
-                   when Proc     then parent.call(self)
+                   when Proc     then parent.call(lockable)
                    when Symbol   then lockable.send(parent)
                    when NilClass then nil
                    else raise InvalidConfig, "unknown parent type #{parent.inspect}"
