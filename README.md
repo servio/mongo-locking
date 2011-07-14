@@ -4,7 +4,7 @@ Mongo::Locking is a library that effectively enables cross-process blocking
 mutexes, using simple but flexible primitives to express an arbitrary graph of
 lock dependencies between class instances.
 
-### Background
+#### Background
 
 Consider the following fairly common scenario:
 
@@ -25,37 +25,37 @@ scenarios?
 
 In the RDBMS world, you've got a couple options:
 
-1. "SELECT .. FOR UPDATE" or equivalent.
+1. `SELECT .. FOR UPDATE` or equivalent.
 
-Depending on the underlying storage engine, this will write lock at minimum the
-given row, and in most modern RDBMS', a cluster of rows around the row you're
-trying to "protect".  This approach tends to require breaking out of the ORM
-with custom SQL, and carries with it all sorts of unintended/unexpected
-performance/synchronization/deadlock pitfalls.  It really starts to break down
-when there is more than one object that needs to be "locked", or when crossing
-database boundaries.
+    Depending on the underlying storage engine, this will write lock at minimum the
+    given row, and in most modern RDBMS', a cluster of rows around the row you're
+    trying to "protect".  This approach tends to require breaking out of the ORM
+    with custom SQL, and carries with it all sorts of unintended/unexpected
+    performance/synchronization/deadlock pitfalls.  It really starts to break down
+    when there is more than one object that needs to be "locked", or when crossing
+    database boundaries.
 
 2. Rely on the ACID properties of SQL92 transactions to enforce data integrity.
 
-Given 2 or more competing, disparate processes running asynchronously, accessing
-the same resources.  Both enter into transactions, possibly access overlapping
-resources, one wins and the other (eventually) fails after attempting to commit.
+    Given 2 or more competing, disparate processes running asynchronously, accessing
+    the same resources.  Both enter into transactions, possibly access overlapping
+    resources, one wins and the other (eventually) fails after attempting to commit.
 
-Practically, what does the erroring code do?  Does it retry?  Was it written in
-a way that even makes a retry possible?  Is the context so consistently atomic
-and stateless that it could blindly do so?  Does it just bail and fail?  (Yes,
-most of the time.)  What if it was acting on an asynchronous imperative across a
-message bus?  Must this condition be detected by additional code, and the
-imperative replayed by some other code somewhere else?  Wouldn't it be
-conditional on
+    Practically, what does the erroring code do?  Does it retry?  Was it written in
+    a way that even makes a retry possible?  Is the context so consistently atomic
+    and stateless that it could blindly do so?  Does it just bail and fail?  (Yes,
+    most of the time.)  What if it was acting on an asynchronous imperative across a
+    message bus?  Must this condition be detected by additional code, and the
+    imperative replayed by some other code somewhere else?  Wouldn't it be
+    conditional on
 
-OR, both enter into transactions, but the relationship between resources is not
-expressed in terms of RDBMS constraints (the common case), so the RDBMS has no
-idea that integrity has been violated.
+    OR, both enter into transactions, but the relationship between resources is not
+    expressed in terms of RDBMS constraints (the common case), so the RDBMS has no
+    idea that integrity has been violated.
 
-Transactions may sound like a panacea at first, but in real-world complex
-systems, their edge conditions often bear a greater cost and complexity than the
-problems they're being used to solve.
+    Transactions may sound like a panacea at first, but in real-world complex
+    systems, their edge conditions often bear a greater cost and complexity than the
+    problems they're being used to solve.
 
 #### NoSQL
 
@@ -99,46 +99,50 @@ dependency graph is resolved at invocation-time.
 
 Consider this simplified example of using it with DataMapper:
 
-    class Order
-        include ::DataMapper::Resource
-        include ::Mongo::Locking
+```ruby
+class Order
+    include ::DataMapper::Resource
+    include ::Mongo::Locking
 
-        has n, :order_items
+    has n, :order_items
 
-        lockable!
-    end
+    lockable!
+end
 
-    class OrderItem
-        include ::DataMapper::Resource
-        include ::Mongo::Locking
+class OrderItem
+    include ::DataMapper::Resource
+    include ::Mongo::Locking
 
-        belongs_to :order
-        has 1, :job_flow
+    belongs_to :order
+    has 1, :job_flow
 
-        # invokes method to get "parent" lockable
-        locked_by! :order
-    end
+    # invokes method to get "parent" lockable
+    locked_by! :order
+end
 
-    class JobFlow
-        include ::DataMapper::Resource
-        include ::Mongo::Locking
+class JobFlow
+    include ::DataMapper::Resource
+    include ::Mongo::Locking
 
-        belongs_to :order_item
+    belongs_to :order_item
 
-        # also takes a closure, yielding some abitrary "parent" lockable
-        locked_by! { |me| me.order_item }
-    end
+    # also takes a closure, yielding some abitrary "parent" lockable
+    locked_by! { |me| me.order_item }
+end
+```
 
 Other (simplified) invocations:
 
-    Order.lockable! :key => :id
-    Order.lockable! :scope => "OtherClass"
-    Order.lockable! :key => proc { |me| SHA1.hexdigest(me.balls) }
+```ruby
+Order.lockable! :key => :id
+Order.lockable! :scope => "OtherClass"
+Order.lockable! :key => proc { |me| SHA1.hexdigest(me.balls) }
 
-    OrderItem.locked_by! { |me| me.order }
-    OrderItem.locked_by! :parent => proc { |me| me.order }
-    OrderItem.locked_by! :order
-    OrderItem.locked_by! :parent => :order
+OrderItem.locked_by! { |me| me.order }
+OrderItem.locked_by! :parent => proc { |me| me.order }
+OrderItem.locked_by! :order
+OrderItem.locked_by! :parent => :order
+```
 
 ### Testing
 
@@ -153,20 +157,20 @@ Given:
 
 1. General race, same object
 
-    P1: Order.first.lock { debugger }  # gets and holds lock
-    P2: Order.first.lock { puts "hi" } # retries acquire, fails
+        P1: Order.first.lock { debugger }  # gets and holds lock
+        P2: Order.first.lock { puts "hi" } # retries acquire, fails
 
 2. General race, locked root, attempt to lock from child
 
-    P1: Order.first.lock { debugger }  # gets and holds lock
-    P2: OrderItem.first.lock { puts "hi" } # retries acquire, fails
+        P1: Order.first.lock { debugger }  # gets and holds lock
+        P2: OrderItem.first.lock { puts "hi" } # retries acquire, fails
 
 3. General race, locked root from child, attempt to lock from child
 
-    P1: OrderItem.first.lock { debugger }  # gets and holds lock
-    P2: OrderItem.first.lock { puts "hi" } # retries acquire, fails
+        P1: OrderItem.first.lock { debugger }  # gets and holds lock
+        P2: OrderItem.first.lock { puts "hi" } # retries acquire, fails
 
 4. Nested lock acquisition
 
-    P1: Order.first.lock { puts "1"; Order.first.lock { puts "2" } }
-    # should see 1 and 2
+        P1: Order.first.lock { puts "1"; Order.first.lock { puts "2" } }
+        # should see 1 and 2
