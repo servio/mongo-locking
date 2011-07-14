@@ -27,44 +27,49 @@ In the RDBMS world, you've got a couple options:
 
 1. `SELECT .. FOR UPDATE` or equivalent.
 
-    Depending on the underlying storage engine, this will write lock at minimum the
-    given row, and in most modern RDBMS', a cluster of rows around the row you're
-    trying to "protect".  This approach tends to require breaking out of the ORM
-    with custom SQL, and carries with it all sorts of unintended/unexpected
-    performance/synchronization/deadlock pitfalls.  It really starts to break down
-    when there is more than one object that needs to be "locked", or when crossing
-    database boundaries.
+    Depending on the underlying storage engine, this will write lock at minimum
+    the given row, and in most modern RDBMS', a cluster of rows around the row
+    you're trying to "protect".  This approach tends to require breaking out of
+    the ORM with custom SQL, and carries with it all sorts of
+    unintended/unexpected performance/synchronization/deadlock pitfalls.  It
+    really starts to break down when there is more than one object that needs to
+    be "locked", multiple loosely-related objects that need to be "locked", one
+    or when crossing database boundaries.
 
 2. Rely on the ACID properties of SQL92 transactions to enforce data integrity.
 
-    Given 2 or more competing, disparate processes running asynchronously, accessing
-    the same resources.  Both enter into transactions, possibly access overlapping
-    resources, one wins and the other (eventually) fails after attempting to commit.
+    (a) Given 2 or more competing, disparate processes running asynchronously,
+    accessing the same resources.  Both enter into transactions, possibly access
+    overlapping resources, one wins and the other (eventually) fails after
+    attempting to commit.
 
-    Practically, what does the erroring code do?  Does it retry?  Was it written in
-    a way that even makes a retry possible?  Is the context so consistently atomic
-    and stateless that it could blindly do so?  Does it just bail and fail?  (Yes,
-    most of the time.)  What if it was acting on an asynchronous imperative across a
-    message bus?  Must this condition be detected by additional code, and the
-    imperative replayed by some other code somewhere else?  Wouldn't it be
-    conditional on
+    Practically, what does the erroring code do?  Does it retry?  Was it written
+    in a way that even makes a retry possible?  Is the context so consistently
+    atomic and stateless that it could blindly do so?  Does it just bail and
+    fail?  (Yes, most of the time.)  What if it was acting on an asynchronous
+    imperative across a message bus?  Shouldn't this condition be detected, and
+    the imperative replayed by some other code somewhere else?  Wouldn't that
+    vary depending upon the logical atomicity of the operation?  Etc etc.
 
-    OR, both enter into transactions, but the relationship between resources is not
-    expressed in terms of RDBMS constraints (the common case), so the RDBMS has no
-    idea that integrity has been violated.
+    (b) Given 2 competing processes, both enter into transactions, but the
+    relationship between resources is *not* fully expressed in terms of RDBMS
+    constraints.  This is another very common case, as most ORMs tend to provide
+    integrity (validation) functionality in the app layer, and only a subset
+    actually trickle down into material RDBMS constraints.  As a consequence,
+    the RDBMS will have no idea that logical integrity has been violated, and
+    general misery ensues.
 
-    Transactions may sound like a panacea at first, but in real-world complex
-    systems, their edge conditions often bear a greater cost and complexity than the
-    problems they're being used to solve.
+    Transactions often sound like the panacea at first, but in real-world
+    complex systems, their edge conditions usually bear unforseen cost and
+    complexity on top of the problems they're being used to solve.
 
-#### NoSQL
+### NoSQL
 
 In the NoSQL world, you don't have as many options.  A lot get fooled by the
 false perception that logically embedded objects are somehow protected by that
-nesting (no, they aren't).  Some engines may even provide locking or
-pseudo-transactional primitive(s), but most often the same pitfalls of SQL92
-transactions will apply, especially in scale (distributed, partitioned)
-environments.
+nesting.  (No, they aren't.)  Some engines may even provide locking or
+pseudo-transactional primitive(s), but generally the same pitfalls of SQL92
+transactions apply -- especially in distributed, partitioned environments.
 
 ### A Solution
 
