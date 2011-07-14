@@ -38,9 +38,7 @@ module Mongo
                     opts[:class_name] = self.name
                     self.locker = Locker.new(opts)
 
-                    Locking.debug "#{self.name} is lockable (#{opts.inspect})"
-
-                    self
+                    return self
                 end
 
                 # Options:
@@ -58,9 +56,7 @@ module Mongo
 
                     self.locker = Locker.new(opts)
 
-                    Locking.debug "#{self.name} is locked_by (#{opts.inspect})"
-
-                    self
+                    return self
                 end
 
             end # ClassMethods
