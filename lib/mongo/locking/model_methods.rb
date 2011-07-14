@@ -31,7 +31,6 @@ module Mongo
                     key   = opts[:key]   ||= :id
                     scope = opts[:scope] ||= self.name
 
-                    raise ArgumentError, "locker already defined" if self.locker
                     raise ArgumentError, "locker key must be a Proc or Symbol" unless [Proc, Symbol].include?(key.class)
                     raise ArgumentError, "locker scope must be a Proc, Symbol or String" unless [Proc, Symbol, String].include?(scope.class)
 
@@ -49,7 +48,6 @@ module Mongo
                     opts   = args.extract_options!
                     parent = opts[:parent] ||= parent || args.first
 
-                    raise ArgumentError, "locker already defined" if self.locker
                     raise ArgumentError, "parent reference must be a Proc or Symbol" unless [Proc, Symbol].include?(parent.class)
 
                     opts[:class_name] = self.name
