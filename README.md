@@ -1,10 +1,10 @@
-# Summary
+### Summary
 
 Mongo::Locking is a library that effectively enables cross-process blocking
-mutexes, using a simple but flexible pair of primitives to express an arbitrary
-graph of lock dependencies between class instances.
+mutexes, using simple but flexible primitives to express an arbitrary graph of
+lock dependencies between class instances.
 
-# Background
+### Background
 
 Consider the following fairly common scenario:
 
@@ -21,7 +21,7 @@ In any case, you need to enforce some notion of data integrity as portions of
 the graph mutate.  How does one normally enforce integrity in concurrent access
 scenarios?
 
-## RDBMS
+#### RDBMS
 
 In the RDBMS world, you've got a couple options:
 
@@ -57,7 +57,7 @@ Transactions may sound like a panacea at first, but in real-world complex
 systems, their edge conditions often bear a greater cost and complexity than the
 problems they're being used to solve.
 
-## NoSQL
+#### NoSQL
 
 In the NoSQL world, you don't have as many options.  A lot get fooled by the
 false perception that logically embedded objects are somehow protected by that
@@ -66,8 +66,7 @@ pseudo-transactional primitive(s), but most often the same pitfalls of SQL92
 transactions will apply, especially in scale (distributed, partitioned)
 environments.
 
-
-## A Solution
+### A Solution
 
 However, when certain requirements are satisfied, one mechanism can
 substantively bridge the gap: atomic increment/decrement.  Anything that
@@ -91,7 +90,7 @@ Behaviour:
 
 
 
-# Usage
+### Usage
 
 While Mongo::Locking depends on Mongo, it can be applied to just about any ORM
 or class structure.  All locks have a namespace (scope) and a key (some
@@ -141,33 +140,33 @@ Other (simplified) invocations:
     OrderItem.locked_by! :order
     OrderItem.locked_by! :parent => :order
 
-# Testing
+### Testing
 
 Well, testing concurrency, especially in Ruby, is "difficult".  For now, here's
 some irb-level conceptual tests that this library works with:
 
 Given:
 
-- Pn == process N
-- Order.id == 1
-- OrderItem.id == 1, OrderItem.order_id = 1
+    Pn == process N
+    Order.id == 1
+    OrderItem.id == 1, OrderItem.order_id = 1
 
 1. General race, same object
 
-   P1: Order.first.lock { debugger }  # gets and holds lock
-   P2: Order.first.lock { puts "hi" } # retries acquire, fails
+    P1: Order.first.lock { debugger }  # gets and holds lock
+    P2: Order.first.lock { puts "hi" } # retries acquire, fails
 
 2. General race, locked root, attempt to lock from child
 
-   P1: Order.first.lock { debugger }  # gets and holds lock
-   P2: OrderItem.first.lock { puts "hi" } # retries acquire, fails
+    P1: Order.first.lock { debugger }  # gets and holds lock
+    P2: OrderItem.first.lock { puts "hi" } # retries acquire, fails
 
 3. General race, locked root from child, attempt to lock from child
 
-   P1: OrderItem.first.lock { debugger }  # gets and holds lock
-   P2: OrderItem.first.lock { puts "hi" } # retries acquire, fails
+    P1: OrderItem.first.lock { debugger }  # gets and holds lock
+    P2: OrderItem.first.lock { puts "hi" } # retries acquire, fails
 
 4. Nested lock acquisition
 
-   P1: Order.first.lock { puts "1"; Order.first.lock { puts "2" } }
-   # should see 1 and 2
+    P1: Order.first.lock { puts "1"; Order.first.lock { puts "2" } }
+    # should see 1 and 2
