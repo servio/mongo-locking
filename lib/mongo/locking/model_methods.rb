@@ -11,9 +11,8 @@ module Mongo
             included do
                 # We don't want people modifying this attribute, but it needs to
                 # be accessible from the outside.
-                class << self
-                    attr_reader :locker
-                end
+                class_inheritable_accessor :locker, :instance_writer => false,
+                                                    :instance_reader => false
             end
 
             module ClassMethods
@@ -37,7 +36,7 @@ module Mongo
                     raise ArgumentError, "locker scope must be a Proc, Symbol or String" unless [Proc, Symbol, String].include?(scope.class)
 
                     opts[:class_name] = self.name
-                    @locker = Locker.new(opts)
+                    self.locker = Locker.new(opts)
 
                     Locking.debug "#{self.name} is lockable (#{opts.inspect})"
 
@@ -57,7 +56,7 @@ module Mongo
 
                     opts[:class_name] = self.name
 
-                    @locker = Locker.new(opts)
+                    self.locker = Locker.new(opts)
 
                     Locking.debug "#{self.name} is locked_by (#{opts.inspect})"
 
