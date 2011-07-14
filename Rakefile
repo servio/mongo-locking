@@ -1,3 +1,7 @@
 task :default do
-    puts "TBC"
+    Kernel.exec("#{$0}", '-T')
+end
+
+task :gem do
+    `gem build mongo-locking.gemspec`
 end
