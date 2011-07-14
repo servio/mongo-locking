@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name             = "mongo-locking"
-  s.version          = "0.0.1"
+  s.version          = "0.0.2.rc1"
   s.platform         = Gem::Platform::RUBY
   s.has_rdoc         = true
   s.extra_rdoc_files = ["README.txt", "LICENSE"]
