@@ -73,7 +73,7 @@ module Mongo
                 def lock(opts = {})
                     raise ArgumentError, "#{self.class.name}#lock requires a block" unless block_given?
 
-                    lockable = self.class.locker.lock(self)
+                    lockable = self.class.locker.acquire(self)
 
                     return yield
 
@@ -91,7 +91,7 @@ module Mongo
                     # Calling lockable's locker instead of self potentially
                     # saves us the cost of "find root lockable" that locker
                     # would perform.
-                    lockable.class.locker.unlock(lockable) if lockable
+                    lockable.class.locker.release(lockable) if lockable
                 end
 
             end # InstanceMethods

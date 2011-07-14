@@ -39,30 +39,6 @@ module Mongo
                 Thread.current[@refcount_key] ||= Hash.new(0)
             end
 
-            def lock(from)
-                lockable = root_for(from)
-                locker   = lockable.class.locker
-
-                key   = locker.key_for(lockable)
-                scope = locker.scope_for(lockable)
-
-                locker.acquire(scope, key)
-
-                return lockable
-            end
-
-            def unlock(from)
-                lockable = root_for(from)
-                locker   = lockable.class.locker
-
-                key   = locker.key_for(lockable)
-                scope = locker.scope_for(lockable)
-
-                locker.release(scope, key)
-
-                return lockable
-            end
-
             # refcounts[] is about enabling non-blocking behaviour when the
             # process has already acquired the lock (e.g. controller locks
             # Order, calls model save method that also locks Order).  In a way,
@@ -73,13 +49,19 @@ module Mongo
             # We increment it immediately so that any further (nested) calls
             # won't block, but that means we have to make sure to decrement it
             # on every failure case.
-            def acquire(scope, key)
-                name = scope + "/" + key
+
+            def acquire(from)
+                lockable = root_for(from)
+                locker   = lockable.class.locker
+
+                scope = locker.scope_for(lockable)
+                key   = locker.key_for(lockable)
+                name  = scope + "/" + key
 
                 refcounts[key] += 1
                 if refcounts[key] > 1
                     Locking.info "acquire: re-using lock for #{name}##{refcounts[key]}"
-                    return true
+                    return lockable
                 end
 
                 target   = { :scope => scope, :key => key }
@@ -137,11 +119,16 @@ module Mongo
 
                 Locking.info "acquire: #{name} locked (#{refcount})"
 
-                return true
+                return lockable
             end
 
-            def release(scope, key)
-                name = scope + "/" + key
+            def release(from)
+                lockable = root_for(from)
+                locker   = lockable.class.locker
+
+                key   = locker.key_for(lockable)
+                scope = locker.scope_for(lockable)
+                name  = scope + "/" + key
 
                 refcounts[key] -= 1
                 if refcounts[key] > 0
