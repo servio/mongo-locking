@@ -8,13 +8,6 @@ module Mongo
         module ModelMethods
             extend ::ActiveSupport::Concern
 
-            included do
-                # We don't want people modifying this attribute, but it needs to
-                # be accessible from the outside.
-                class_inheritable_accessor :locker, :instance_writer => false,
-                                                    :instance_reader => false
-            end
-
             module ClassMethods
 
                 # Options:
@@ -35,7 +28,7 @@ module Mongo
                     raise ArgumentError, "locker scope must be a Proc, Symbol or String" unless [Proc, Symbol, String].include?(scope.class)
 
                     opts[:class_name] = self.name
-                    self.locker = Locker.new(opts)
+                    @locker = Locker.new(opts)
 
                     return self
                 end
@@ -52,9 +45,14 @@ module Mongo
 
                     opts[:class_name] = self.name
 
-                    self.locker = Locker.new(opts)
+                    @locker = Locker.new(opts)
 
                     return self
+                end
+
+                # No-frills class-inheritable locker reference
+                def locker
+                    @locker ||= (superclass.locker if superclass.respond_to?(:locker))
                 end
 
             end # ClassMethods
