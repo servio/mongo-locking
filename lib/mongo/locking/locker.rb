@@ -64,11 +64,14 @@ module Mongo
                     a_lock   = atomic_inc(target, { :refcount => 1 })
                     refcount = a_lock['refcount']
 
-                    # FIXME: If the lock is "expired" then we just inherit the
-                    # lock and assume the user of the lock is "gone", right?  Do
-                    # we need to do some decr/incr?  Is this correct?
+                    # Check lock expiration.
                     if a_lock['expire_at'] < Time.now
-                        refcount = 1
+                        # FIXME: If the lock is "expired" do we just inherit the
+                        # lock and assume the user of the lock is "gone"?  Don't
+                        # we need to renew the expiration?  Do we check before
+                        # or after refcount checks?
+                        Locking.error "acquire: lock expired, what to do?"
+                        raise LockFailure
                     end
 
                     # If the refcount is 0 or somehow less than 0, after we just
