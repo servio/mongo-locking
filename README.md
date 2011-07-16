@@ -55,11 +55,11 @@ In the RDBMS world, you've got a couple options:
     relationship between resources is *not* fully expressed in terms of RDBMS
     constraints.  This is another very common case, as most ORMs tend to provide
     integrity (validation) functionality in the app layer, and only a subset
-    actually trickle down into material RDBMS constraints.  As a consequence,
-    the RDBMS will have no idea that logical integrity has been violated, and
-    general misery ensues.
+    actually trickle down into material RDBMS constraints.  In this case, the
+    RDBMS has no idea that logical integrity has been violated, and general
+    misery will ensue.
 
-    Transactions are often mistakenly believed to be a panacea for these types
+    Transactions are often mistakenly perceived as a panacea for these types of
     of problems, and as a consequence usually compound the problems they are
     being used to solve with additional complexity and cost.
 
@@ -99,10 +99,32 @@ Behaviour:
 
 ### Usage
 
-While Mongo::Locking depends on Mongo, it can be applied to just about any ORM
-or class structure.  All locks have a namespace (scope) and a key (some
-instance-related value), classes can depend on others for their locks, and the
-dependency graph is resolved at invocation-time.
+Mongo::Locking makes no effort to help configure the MongoDB connection - that's
+what the Mongo Ruby Driver is for.  However, when the collection is specified as
+a proc, it will be lazily resolved during the first invocation of a lock.  This
+makes the concern of load/initialization order largely irrelevant.
+
+Configuring Mongo::Locking with the Mongo Ruby Driver would look like this:
+
+```ruby
+::Mongo::Locking.configure(:collection => proc {
+    ::Mongo::Connection.new("localhost").db("somedb").collection("locks")
+})
+```
+
+Or using Mongoid:
+
+```ruby
+::Mongo::Locking.configure({
+    :collection => proc { ::Mongoid.database.collection("locks") },
+    :logger     => Logger.new(STDOUT),
+})
+```
+
+While Mongo::Locking depends on Mongo, it can be applied to any arbitrary object
+model structure, including other ORMs.  All locks have a namespace (scope) and a
+key (some instance-related value), classes can depend on others for their locks,
+and the dependency graph is resolved at invocation-time.
 
 Consider this simplified example of using it with DataMapper:
 
@@ -138,7 +160,7 @@ class JobFlow
 end
 ```
 
-Other (simplified) configurations:
+Other (simplified) graph configuration imperatives:
 
 ```ruby
 Order.lockable! :key => :id
@@ -158,7 +180,7 @@ order = Order.get(1)
 order.lock do
     # ...
 
-    order_items.each do |item|
+    order.order_items.each do |item|
         item.lock do
 
             # this won't block even though the same lock is being acquired
@@ -172,7 +194,7 @@ Not blocking on lock re-acquisition means save hooks on models can be as
 defensive as controller methods operating on them: both can lock, and it will
 Just Work.
 
-Pretty neat.
+Pretty neat!
 
 
 ### Testing
