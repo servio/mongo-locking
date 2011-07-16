@@ -1,5 +1,5 @@
-# Locker is a container for locking related commands, so we minimally impact the
-# model's namespace.
+# Locker is a container for isolating all the locking-related methods, so we
+# minimally impact the namespace of wherever we're mixed into.
 #
 # In addition to the Mongo-based, per-process, blocking lock mechanism itself,
 # we also employ a thread-local lock refcount to achieve non-blocking behaviour
@@ -38,24 +38,15 @@ module Mongo
                 Thread.current[@refcount_key] ||= Hash.new(0)
             end
 
-            # refcounts[] is about enabling non-blocking behaviour when the
-            # process has already acquired the lock (e.g. controller locks
-            # Order, calls model save method that also locks Order).  In a way,
-            # it's like an IdentityMap, mapping instance keys to reference
-            # counts (another reason it lives on the class and not the
-            # instance).
-            #
-            # We increment it immediately so that any further (nested) calls
-            # won't block, but that means we have to make sure to decrement it
-            # on every failure case.
-
+            # We increment refcounts ASARP so that any further (nested) calls
+            # won't block.  But that means we have to make sure to decrement it
+            # on any failure case.
             def acquire(from)
                 lockable = root_for(from)
                 locker   = lockable.class.locker
-
-                scope = locker.scope_for(lockable)
-                key   = locker.key_for(lockable)
-                name  = scope + "/" + key
+                scope    = locker.scope_for(lockable)
+                key      = locker.key_for(lockable)
+                name     = scope + "/" + key
 
                 refcounts[key] += 1
                 if refcounts[key] > 1
@@ -124,10 +115,9 @@ module Mongo
             def release(from)
                 lockable = root_for(from)
                 locker   = lockable.class.locker
-
-                key   = locker.key_for(lockable)
-                scope = locker.scope_for(lockable)
-                name  = scope + "/" + key
+                key      = locker.key_for(lockable)
+                scope    = locker.scope_for(lockable)
+                name     = scope + "/" + key
 
                 refcounts[key] -= 1
                 if refcounts[key] > 0
@@ -137,33 +127,30 @@ module Mongo
 
                 target = { :scope => scope, :key => key }
 
-                begin
-                    refcount = atomic_inc(target, { :refcount => -1 })['refcount']
+                refcount = atomic_inc(target, { :refcount => -1 })['refcount']
 
-                    Locking.info "release: #{name} unlocked (#{refcount})"
+                Locking.info "release: #{name} unlocked (#{refcount})"
 
-                    # If the refcount is at zero, nuke it out of the table.
-                    #
-                    # FIXME: If the following delete fails (e.g. something else
-                    # incremented it before we tried to delete it), it will
-                    # raise:
-                    #
-                    #    <Mongo::OperationFailure: Database command 'findandmodify'
-                    #       failed: {"errmsg"=>"No matching object found", "ok"=>0.0}>
-                    #
-                    # Need to see if there's a way to report the error
-                    # informationally instead of exceptionally.  'rescue nil'
-                    # hack in place until something more correct is put in.
-                    if refcount == 0
-                        unless hash = atomic_delete(target.merge({ :refcount => 0 })) rescue nil
-                            Locking.debug "release: lock #{name} no longer needed, deleted"
-                        end
+                # If the refcount is at zero, nuke it out of the table.
+                #
+                # TODO: If the following delete fails (e.g. something else
+                # incremented it before we tried to delete it), it will raise:
+                #
+                #    <Mongo::OperationFailure: Database command 'findandmodify'
+                #       failed: {"errmsg"=>"No matching object found", "ok"=>0.0}>
+                #
+                # Need to see if there's a way to report the error
+                # informationally instead of exceptionally.  'rescue nil' hack
+                # in place until something more correct is put in.
+                if refcount == 0
+                    unless hash = atomic_delete(target.merge({ :refcount => 0 })) rescue nil
+                        Locking.debug "release: lock #{name} no longer needed, deleted"
                     end
-
-                rescue => e
-                    log_exception(e)
-                    raise LockFailure, "unable to release lock #{name}"
                 end
+
+            rescue => e
+                log_exception(e)
+                raise LockFailure, "unable to release lock #{name}"
             end
 
             def root_for(from)
@@ -217,6 +204,7 @@ module Mongo
 
             private
 
+            # Separated out in case you want to monkeypatch it into oblivion.
             def log_exception(e)
                 Locking.error e.inspect + " " + e.backtrace[0..4].inspect
             end
