@@ -13,7 +13,6 @@
 
 require 'mongo/locking'
 require 'active_support/core_ext/numeric/time'
-require 'active_support/core_ext/object/blank'
 
 module Mongo
     module Locking
@@ -213,7 +212,7 @@ module Mongo
             end
 
             def is_root?
-                self.config[:parent].blank?
+                self.config[:parent].nil?
             end
 
             private
