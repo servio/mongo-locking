@@ -142,11 +142,14 @@ module Mongo
                 #    <Mongo::OperationFailure: Database command 'findandmodify'
                 #       failed: {"errmsg"=>"No matching object found", "ok"=>0.0}>
                 #
-                # Need to see if there's a way to report the error
-                # informationally instead of exceptionally.  'rescue nil' hack
-                # in place until something more correct is put in.
+                # This is normal for a concurrent system.
+                #
+                # Since a lock with refcount 0 does not impact lock functionality,
+                # we can also ignore any other exceptions during lock deletion.
+                #
+                # Use 'rescue nil' to ignore all exceptions.
                 if refcount == 0
-                    unless hash = atomic_delete(target.merge({ :refcount => 0 })) rescue nil
+                    if hash = atomic_delete(target.merge({ :refcount => 0 })) rescue nil
                         Locking.debug "release: lock #{name} no longer needed, deleted"
                     end
                 end
@@ -249,3 +252,4 @@ module Mongo
         end # Locker
     end # Locking
 end # Mongo
+
