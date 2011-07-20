@@ -64,22 +64,48 @@ module Mongo
                     a_lock   = atomic_inc(target, { :refcount => 1 })
                     refcount = a_lock['refcount']
 
-                    # Check lock expiration.
-                    if a_lock['expire_at'] < Time.now
-                        # FIXME: If the lock is "expired" do we just inherit the
-                        # lock and assume the user of the lock is "gone"?  Don't
-                        # we need to renew the expiration?  Do we check before
-                        # or after refcount checks?
-                        Locking.error "acquire: lock expired, what to do?"
-                        raise LockFailure
-                    end
-
                     # If the refcount is 0 or somehow less than 0, after we just
                     # incremented, then retry without counting against the max.
                     if refcount < 1
                         retries -= 1
                         Locking.debug "acquire: refcount #{refcount}, unexpected state"
                         raise LockFailure
+                    end
+
+                    # Check lock expiration.
+                    if a_lock['expire_at'] < Time.now
+                        # If the lock is "expired". We assume the owner of the lock
+                        # is "gone" without decrementing the refcount.
+                        Locking.warn "acquire: #{name} lock expired"
+
+                        # Attempt to decrement the refcount to "reverse" the
+                        # damage caused by the "gone" process.
+                        # There might be more than one process trying to do
+                        # this at the same time.
+                        # Therefore, we need the refcount > 1 guard.
+                        # When the lock's refcount is no longer > 1 by the time
+                        # this process try to decrement, Mongo will raise
+                        #    <Mongo::OperationFailure: Database command 'findandmodify'
+                        #       failed: {"errmsg"=>"No matching object found", "ok"=>0.0}>
+                        # use 'rescue nil' to handle that.
+                        a_lock = atomic_inc(target.merge({:refcount => {'$gt' => 1} }), { :refcount => -1 }) rescue nil
+
+                        unless a_lock
+                            # We lost the race to "reverse" the damage
+                            # Someone else has the lock now. We should retry
+                            raise LockFailure
+                        end
+
+                        # We have won the race to "reverse" the damage
+                        # but we may have not "reversed" enough of the damage
+                        # Consider the case that the expired lock has a large refcount
+                        # We still need to check refcount to make sure that we are
+                        # have acquired the lock
+
+                        refcount = a_lock['refcount']
+
+                        # the rest of the expired_lock handling logic coincides
+                        # with normal lock logic
                     end
 
                     # If recount is greater than 1, we lost the race.  Decrement
@@ -89,6 +115,16 @@ module Mongo
                         Locking.debug "acquire: refcount #{refcount}, race lost"
                         raise LockFailure
                     end
+
+                    # refcount == 1, we have acquired the lock
+                    # renew expire_at for future async/lazy lock reaping
+                    #
+                    # Note:
+                    #   This expire_at renewal only happens when a process acquire the lock
+                    #   for the first time. Subsequent lock reuse will NOT renew expire_at.
+                    #   This assume that all legitimate operations should complete
+                    #   within config[:max_lifetime] time limit.
+                    atomic_update(target, {'expire_at' => self.config[:max_lifetime].from_now})
 
                 rescue LockFailure => e
                     retries += 1
@@ -235,10 +271,16 @@ module Mongo
                     :new    => true,    # Return the updated document
                     :upsert => true,    # Update if document exists, insert if not
                     :query  => search_hash.merge({'$atomic' => 1}),
-                    :update => {
-                        '$inc' => update_hash.dup,
-                        '$set' => { 'expire_at' => self.config[:max_lifetime].from_now }
-                    },
+                    :update => {'$inc' => update_hash.dup},
+                })
+            end
+
+            def atomic_update(search_hash, update_hash)
+                return Locking.collection.find_and_modify({
+                    :new    => true,    # Return the updated document
+                    :upsert => true,    # Update if document exists, insert if not
+                    :query  => search_hash.merge({'$atomic' => 1}),
+                    :update => {'$set' => update_hash.dup},
                 })
             end
 
