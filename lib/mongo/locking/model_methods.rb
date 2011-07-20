@@ -64,7 +64,11 @@ module Mongo
                 def lock(opts = {})
                     raise ArgumentError, "#{self.class.name}#lock requires a block" unless block_given?
 
-                    lockable = self.class.locker.acquire(self)
+                    # Look for the top level lockable
+                    lockable = self.class.locker.root_for(self)
+
+                    # Try to acquire the lock. If succeeds, "locked" will be set
+                    locked = lockable.class.locker.acquire(lockable)
 
                     return yield
 
@@ -73,7 +77,7 @@ module Mongo
                     raise e
 
                 ensure
-                    # Only unlock if lockable was set.  We're using this to
+                    # Only unlock if "locked" was set.  We're using this to
                     # distinguish between an exception from the yield vs. an
                     # exception from our own locking code.  Doing it in an
                     # ensure block makes us defensible against a return from
@@ -82,7 +86,7 @@ module Mongo
                     # Calling lockable's locker instead of self potentially
                     # saves us the cost of "find root lockable" that locker
                     # would perform.
-                    lockable.class.locker.release(lockable) if lockable
+                    lockable.class.locker.release(lockable) if locked
                 end
 
             end # InstanceMethods
@@ -90,3 +94,4 @@ module Mongo
         end # ModelMethods
     end # Locking
 end # Mongo
+
