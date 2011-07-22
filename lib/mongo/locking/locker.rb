@@ -21,6 +21,7 @@ module Mongo
             include Exceptions
 
             attr_reader :config
+            delegate    :debug, :info, :warn, :error, :fatal, :to => Locking
 
             DEFAULT_OPTIONS = {
                 :max_retries          => 5,
@@ -50,7 +51,7 @@ module Mongo
 
                 refcounts[key] += 1
                 if refcounts[key] > 1
-                    Locking.info "acquire: re-using lock for #{name}##{refcounts[key]}"
+                    info "acquire: re-using lock for #{name}##{refcounts[key]}"
                     return lockable
                 end
 
@@ -58,7 +59,7 @@ module Mongo
                 interval = self.config[:first_retry_interval]
                 retries  = 0
 
-                Locking.debug "acquire: attempting lock of #{name}"
+                debug "acquire: attempting lock of #{name}"
 
                 begin
                     a_lock   = atomic_inc(target, { :refcount => 1 })
@@ -68,7 +69,7 @@ module Mongo
                     # incremented, then retry without counting against the max.
                     if refcount < 1
                         retries -= 1
-                        Locking.debug "acquire: refcount #{refcount}, unexpected state"
+                        debug "acquire: refcount #{refcount}, unexpected state"
                         raise LockFailure
                     end
 
@@ -76,7 +77,7 @@ module Mongo
                     if a_lock.has_key?('expire_at') and a_lock['expire_at'] < Time.now
                         # If the lock is "expired". We assume the owner of the lock
                         # is "gone" without decrementing the refcount.
-                        Locking.warn "acquire: #{name} lock expired"
+                        warn "acquire: #{name} lock expired"
 
                         # Attempt to decrement the refcount to "reverse" the
                         # damage caused by the "gone" process.
@@ -112,7 +113,7 @@ module Mongo
                     # and try again.
                     if refcount > 1
                         atomic_inc(target, { :refcount => -1 })
-                        Locking.debug "acquire: refcount #{refcount}, race lost"
+                        debug "acquire: refcount #{refcount}, race lost"
                         raise LockFailure
                     end
 
@@ -133,7 +134,7 @@ module Mongo
                         raise LockTimeout, "unable to acquire lock #{name}"
                     end
 
-                    Locking.warn "acquire: #{name} refcount #{refcount}, retry #{retries} for lock"
+                    warn "acquire: #{name} refcount #{refcount}, retry #{retries} for lock"
 
                     sleep(interval.to_f)
                     interval = [self.config[:max_retry_interval].to_f, interval * 2].min
@@ -146,7 +147,7 @@ module Mongo
                     raise LockFailure, "unable to acquire lock #{name}"
                 end
 
-                Locking.info "acquire: #{name} locked (#{refcount})"
+                info "acquire: #{name} locked (#{refcount})"
 
                 return lockable
             end
@@ -160,7 +161,7 @@ module Mongo
 
                 refcounts[key] -= 1
                 if refcounts[key] > 0
-                    Locking.info "release: re-using lock for #{name}##{refcounts[key]}"
+                    info "release: re-using lock for #{name}##{refcounts[key]}"
                     return true
                 end
 
@@ -168,7 +169,7 @@ module Mongo
 
                 refcount = atomic_inc(target, { :refcount => -1 })['refcount']
 
-                Locking.info "release: #{name} unlocked (#{refcount})"
+                info "release: #{name} unlocked (#{refcount})"
 
                 # If the refcount is at zero, nuke it out of the table.
                 #
@@ -186,7 +187,7 @@ module Mongo
                 # Use 'rescue nil' to ignore all exceptions.
                 if refcount == 0
                     if hash = atomic_delete(target.merge({ :refcount => 0 })) rescue nil
-                        Locking.debug "release: lock #{name} no longer needed, deleted"
+                        debug "release: lock #{name} no longer needed, deleted"
                     end
                 end
 
@@ -248,7 +249,7 @@ module Mongo
 
             # Separated out in case you want to monkeypatch it into oblivion.
             def log_exception(e)
-                Locking.error e.inspect + " " + e.backtrace[0..4].inspect
+                error e.inspect + " " + e.backtrace[0..4].inspect
             end
 
             # Notes:
