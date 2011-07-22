@@ -89,6 +89,14 @@ module Mongo
                     lockable.class.locker.release(lockable) if locked
                 end
 
+                # Return true if operating within an open acquired lock.
+                def have_lock?
+                    lockable = self.class.locker.root_for(self)
+                    locker = lockable.class.locker
+                    key = locker.key_for(lockable)
+                    return locker.refcounts[key] == 0
+                end
+
             end # InstanceMethods
 
         end # ModelMethods
