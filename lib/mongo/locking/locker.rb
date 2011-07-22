@@ -188,6 +188,10 @@ module Mongo
                     if hash = atomic_delete(target.merge({ :refcount => 0 })) rescue nil
                         debug "release: lock #{name} no longer needed, deleted"
                     end
+
+                    # Nuke the key from our instance refcounts so we don't
+                    # balloon during long-lived processes.
+                    refcounts.delete(key)
                 end
 
             rescue => e
