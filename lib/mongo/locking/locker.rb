@@ -73,7 +73,7 @@ module Mongo
                     end
 
                     # Check lock expiration.
-                    if a_lock['expire_at'] < Time.now
+                    if a_lock.has_key?('expire_at') and a_lock['expire_at'] < Time.now
                         # If the lock is "expired". We assume the owner of the lock
                         # is "gone" without decrementing the refcount.
                         Locking.warn "acquire: #{name} lock expired"
