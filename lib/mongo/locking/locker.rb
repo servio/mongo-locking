@@ -1,21 +1,22 @@
-# Locker is a container for isolating all the locking-related methods, so we
-# minimally impact the namespace of wherever we're mixed into.
-#
-# In addition to the Mongo-based, per-process, blocking lock mechanism itself,
-# we also employ a thread-local lock refcount to achieve non-blocking behaviour
-# when nesting lock closures.  This is useful for when multiple, isolated code
-# paths are all defensive with locks, but are arbitrarily called within the same
-# thread of execution.
-#
-# We try to limit the number of these objects, so as to minimze extra cost
-# attached to model instance hydration.  Thus the Locker is attached to the
-# model class, and maintains refcounts based on the key it's configured with.
-
 require 'mongo/locking'
 require 'active_support/core_ext/numeric/time'
 
 module Mongo
     module Locking
+
+        # Locker is a container for isolating all the locking-related methods,
+        # so we minimally impact the namespace of wherever we're mixed into.
+        #
+        # In addition to the Mongo-based, per-process, blocking lock mechanism
+        # itself, we also employ a thread-local lock refcount to achieve
+        # non-blocking behaviour when nesting lock closures.  This is useful for
+        # when multiple, isolated code paths are all defensive with locks, but
+        # are arbitrarily called within the same thread of execution.
+        #
+        # We try to limit the number of these objects, so as to minimize extra
+        # cost attached to model instance hydration.  Thus the Locker is
+        # attached to the model class, and maintains refcounts based on the key
+        # it's configured with.
 
         class Locker
             include Exceptions
@@ -75,38 +76,36 @@ module Mongo
 
                     # Check lock expiration.
                     if a_lock.has_key?('expire_at') and a_lock['expire_at'] < Time.now
-                        # If the lock is "expired". We assume the owner of the lock
-                        # is "gone" without decrementing the refcount.
+
+                        # If the lock is "expired". We assume the owner of the
+                        # lock is "gone" without decrementing the refcount.
                         warn "acquire: #{name} lock expired"
 
                         # Attempt to decrement the refcount to "reverse" the
-                        # damage caused by the "gone" process.
-                        # There might be more than one process trying to do
-                        # this at the same time.
-                        # Therefore, we need the refcount > 1 guard.
-                        # When the lock's refcount is no longer > 1 by the time
-                        # this process try to decrement, Mongo will raise
-                        #    <Mongo::OperationFailure: Database command 'findandmodify'
-                        #       failed: {"errmsg"=>"No matching object found", "ok"=>0.0}>
-                        # use 'rescue nil' to handle that.
+                        # damage caused by the "gone" process.  There might be
+                        # more than one process trying to do this at the same
+                        # time.  Therefore, we need the refcount > 1 guard.  If
+                        # the lock's refcount is no longer > 1 by the time this
+                        # process try to decrement, Mongo will raise a
+                        # Mongo::OperationFailure.  Regardless of reason, if it
+                        # fails, we fail.
                         a_lock = atomic_inc(target.merge({:refcount => {'$gt' => 1} }), { :refcount => -1 }) rescue nil
 
                         unless a_lock
-                            # We lost the race to "reverse" the damage
-                            # Someone else has the lock now. We should retry
+                            # We lost the race to "reverse" the damage.  Someone
+                            # else has the lock now.  We will retry.
                             raise LockFailure
                         end
 
-                        # We have won the race to "reverse" the damage
-                        # but we may have not "reversed" enough of the damage
-                        # Consider the case that the expired lock has a large refcount
-                        # We still need to check refcount to make sure that we are
-                        # have acquired the lock
-
+                        # We have won the race to "reverse" the damage but we
+                        # may have not "reversed" enough of the damage.
+                        # Consider the case that the expired lock has a large
+                        # refcount - we still need to check refcount to make
+                        # sure that we are have acquired the lock.
                         refcount = a_lock['refcount']
 
-                        # the rest of the expired_lock handling logic coincides
-                        # with normal lock logic
+                        # The rest of the expired_lock handling logic coincides
+                        # with normal lock logic.
                     end
 
                     # If recount is greater than 1, we lost the race.  Decrement
@@ -117,14 +116,14 @@ module Mongo
                         raise LockFailure
                     end
 
-                    # refcount == 1, we have acquired the lock
-                    # renew expire_at for future async/lazy lock reaping
+                    # If refcount == 1, we have the lock and thus renew
+                    # its expire_at.
                     #
-                    # Note:
-                    #   This expire_at renewal only happens when a process acquire the lock
-                    #   for the first time. Subsequent lock reuse will NOT renew expire_at.
-                    #   This assume that all legitimate operations should complete
-                    #   within config[:max_lifetime] time limit.
+                    # NOTE: This expire_at renewal only happens when a process
+                    # acquires the lock for the first time.  Subsequent lock
+                    # reuse will NOT renew expire_at.  This assumes that all
+                    # legitimate operations should complete within
+                    # config[:max_lifetime] time limit.
                     atomic_update(target, {'expire_at' => self.config[:max_lifetime].from_now})
 
                 rescue LockFailure => e
@@ -173,7 +172,7 @@ module Mongo
 
                 # If the refcount is at zero, nuke it out of the table.
                 #
-                # TODO: If the following delete fails (e.g. something else
+                # NOTE: If the following delete fails (e.g. something else
                 # incremented it before we tried to delete it), it will raise:
                 #
                 #    <Mongo::OperationFailure: Database command 'findandmodify'
@@ -184,7 +183,7 @@ module Mongo
                 # Since a lock with refcount 0 does not impact lock functionality,
                 # we can also ignore any other exceptions during lock deletion.
                 #
-                # Use 'rescue nil' to ignore all exceptions.
+                # We use 'rescue nil' to ignore all exceptions.
                 if refcount == 0
                     if hash = atomic_delete(target.merge({ :refcount => 0 })) rescue nil
                         debug "release: lock #{name} no longer needed, deleted"
