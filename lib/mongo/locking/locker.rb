@@ -124,7 +124,9 @@ module Mongo
                     # reuse will NOT renew expire_at.  This assumes that all
                     # legitimate operations should complete within
                     # config[:max_lifetime] time limit.
-                    atomic_update(target, {'expire_at' => self.config[:max_lifetime].from_now})
+
+                    # Mongo only works with UTC time
+                    atomic_update(target, {'expire_at' => self.config[:max_lifetime].from_now.utc})
 
                 rescue LockFailure => e
                     retries += 1
