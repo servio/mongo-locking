@@ -94,7 +94,7 @@ module Mongo
                     lockable = self.class.locker.root_for(self)
                     locker = lockable.class.locker
                     key = locker.key_for(lockable)
-                    return locker.refcounts[key] == 0
+                    return locker.refcounts[key] > 0
                 end
 
             end # InstanceMethods
