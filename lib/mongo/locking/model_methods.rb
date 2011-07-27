@@ -73,7 +73,8 @@ module Mongo
                     return yield
 
                 rescue => e
-                    Locking.error "#{self.class.name}#lock failed"
+                    # It is normal for block to throw exception, we should log it as info
+                    Locking.info "#{self.class.name}#lock failed"
                     raise e
 
                 ensure
