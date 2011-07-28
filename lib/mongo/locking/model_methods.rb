@@ -72,9 +72,8 @@ module Mongo
 
                     return yield
 
-                rescue => e
-                    # It is normal for block to throw exception, we should log it as info
-                    Locking.info "#{self.class.name}#lock failed"
+                rescue Mongo::Locking::Exceptions::Error => e
+                    Locking.error "#{self.class.name}#lock failed"
                     raise e
 
                 ensure
