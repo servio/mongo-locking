@@ -52,7 +52,7 @@ module Mongo
 
                 refcounts[key] += 1
                 if refcounts[key] > 1
-                    info "acquire: re-using lock for #{name}##{refcounts[key]}"
+                    # info "acquire: re-using lock for #{name}##{refcounts[key]}"
                     return lockable
                 end
 
@@ -60,7 +60,7 @@ module Mongo
                 interval = self.config[:first_retry_interval]
                 retries  = 0
 
-                debug "acquire: attempting lock of #{name}"
+                # debug "acquire: attempting lock of #{name}"
 
                 begin
                     a_lock   = atomic_inc(target, { :refcount => 1 })
@@ -70,7 +70,7 @@ module Mongo
                     # incremented, then retry without counting against the max.
                     if refcount < 1
                         retries -= 1
-                        debug "acquire: refcount #{refcount}, unexpected state"
+                        error "acquire: refcount #{refcount}, unexpected state"
                         raise LockFailure
                     end
 
@@ -135,7 +135,7 @@ module Mongo
                         raise LockTimeout, "unable to acquire lock #{name}"
                     end
 
-                    warn "acquire: #{name} refcount #{refcount}, retry #{retries} for lock"
+                    # warn "acquire: #{name} refcount #{refcount}, retry #{retries} for lock"
 
                     sleep(interval.to_f)
                     interval = [self.config[:max_retry_interval].to_f, interval * 2].min
@@ -162,7 +162,7 @@ module Mongo
 
                 refcounts[key] -= 1
                 if refcounts[key] > 0
-                    info "release: re-using lock for #{name}##{refcounts[key]}"
+                    # info "release: re-using lock for #{name}##{refcounts[key]}"
                     return true
                 end
 
@@ -188,7 +188,7 @@ module Mongo
                 # We use 'rescue nil' to ignore all exceptions.
                 if refcount == 0
                     if hash = atomic_delete(target.merge({ :refcount => 0 })) rescue nil
-                        debug "release: lock #{name} no longer needed, deleted"
+                        # debug "release: lock #{name} no longer needed, deleted"
                     end
 
                     # Nuke the key from our instance refcounts so we don't
